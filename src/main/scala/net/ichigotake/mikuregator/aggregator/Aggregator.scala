@@ -1,52 +1,77 @@
 package net.ichigotake.mikuregator.aggregator
 
-import scala.collection.mutable
+import com.squareup.okhttp.OkHttpClient
+import com.squareup.okhttp.Request._
+import org.json4s._
+import org.json4s.jackson.Serialization
+import org.json4s.jackson.Serialization.read
 
-case class Aggregator(token: String) {
+import scala.collection.mutable.ListBuffer
+import scala.util.control.Breaks
 
-  def aggregate(): Unit = {
-    for (a <- ApiClient(token).getAll) {
-      AggregateAction(apiClient = a, perPage = 20).aggregate() match {
-        case Left(e) => System.err.println(e.getMessage)
-        case Right(b) => System.out.println("Success: " + b)
-      }
+class Aggregator(dryRun: Boolean = false) {
+  
+  final def isDryRun = dryRun
+
+  def aggregate():
+  Unit = {
+    val aggregators: List[RepositoryAggregator] = List(new GithubAggregator())
+    for (a <- aggregators) {
+      a.aggregate().foreach(r => {
+        println(s"${r.fullName}")
+      })
     }
   }
+  
 }
 
-case class AggregateAction(apiClient: ApiRequestAction, perPage: Int) {
+trait RepositoryAggregator {
+  
+  def aggregate(): List[AggregatedRepository]
+  
+}
 
-  def aggregate(): Either[Error, Response] = {
-    val requestBody = RequestBody(perPage = 20)
-    val body = Body(repositories = List(), authors = Set())
-//    paging(requestBody = requestBody, body = body, response = None)
-    paging(requestBody = requestBody, body = body, response = null)
-  }
-
-//  def paging(requestBody: RequestBody, body: Body, response: Option[Response): Either[Error, Response] = {
-  def paging(requestBody: RequestBody, body: Body, response: Response): Either[Error, Response] = {
-    val hasNextPage = response.pagingState.hasNextPage
-    var repositories = response.repositories
-    val authors = mutable.Set[Author]()
-    apiClient.action(response.pagingState)
-      .fold(
-        e => Left(e),
-        r => {
-          for (r <- r) {
-            repositories = r :: repositories
-            authors.add(r.author)
-          }
-          val next: Response = Response(
-            repositories = repositories,
-            authors = authors.toSet,
-            pagingState = response.pagingState.nextPage(repositories.size)
-          )
-          if (!hasNextPage) {
-            return Right(next)
-          }
-          paging(requestBody = requestBody, body = body, response = next)
+class GithubAggregator extends RepositoryAggregator {
+  
+  override def aggregate(): List[AggregatedRepository] = {
+    val aggregated = ListBuffer[AggregatedRepository]()
+    val b = new Breaks
+    b.breakable {
+      var page = 1
+      while (true) {
+        var res = request(page = page)
+        if (res.isEmpty) {
+          b.break()
         }
-    )
+        aggregated.insertAll(aggregated.size, res)
+        page += 1
+      }
+    }
+    aggregated.toList
+  }
+  
+  def request(page: Int = 1): ListBuffer[AggregatedGithubRepository] = {
+    val repositories = ListBuffer[AggregatedGithubRepository]()
+    val client = new OkHttpClient()
+    val req = new Builder()
+      .url(s"https://api.github.com/search/repositories?q=mikutter&sort=updated&sort=desc&per_page=50&page=$page")
+      .build()
+    // TODO: Error handling
+    val response = client.newCall(req).execute().body().string()
+    implicit val formats = Serialization.formats(NoTypeHints)
+    val res = read[GithubResponse](response)
+    for (r <- res.items) {
+      if (!isUpdated(r)) {
+        return repositories
+      }
+      val item = AggregatedGithubRepository(id = r.id, fullName = r.full_name, isPrivate = r.`private`)
+      repositories.insert(repositories.size, item)
+    }
+    repositories
   }
 
+  def isUpdated(repository: GithubRepository): Boolean = {
+    true
+  }
+  
 }

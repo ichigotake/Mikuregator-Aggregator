@@ -6,6 +6,11 @@ Mikuregator-Aggregator - [DRAFT]
 
 Currently status is making a draft.
 
+## Spec and TODO
+
+- TODO: More scala idioms
+- TBD: Don't use api token for reduce operational cost
+
 ## See also
 
 - [MikuregatorをScalaでリプレイスする - diary ichigotake](http://ichigotake.hateblo.jp/entry/2014/12/07/223828)
