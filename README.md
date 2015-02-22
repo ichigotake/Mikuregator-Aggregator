@@ -10,6 +10,7 @@ Currently status is making a draft.
 
 - TODO: More scala idioms
 - TBD: Don't use api token for reduce operational cost
+- [Create draft](https://github.com/ichigotake/Mikuregator-Aggregator/issues/1)
 
 ## See also
 
