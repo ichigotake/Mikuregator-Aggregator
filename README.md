@@ -8,8 +8,10 @@ Currently status is making a draft.
 
 ## Spec and TODO
 
+- TODO: [Create draft](https://github.com/ichigotake/Mikuregator-Aggregator/issues/1)
+- TODO: Use SBT
 - TODO: More scala idioms
-- TBD: Don't use api token for reduce operational cost
+- TBD: Don't use Github api token for reduce operational cost
 
 ## See also
 
