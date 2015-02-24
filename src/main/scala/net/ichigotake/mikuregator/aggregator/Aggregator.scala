@@ -9,20 +9,15 @@ import org.json4s.jackson.Serialization.read
 import scala.collection.mutable.ListBuffer
 import scala.util.control.Breaks
 
-class Aggregator(dryRun: Boolean = false) {
+class Aggregator {
   
-  final def isDryRun = dryRun
-
-  def aggregate():
-  Unit = {
-    val aggregators: List[RepositoryAggregator] = List(new GithubAggregator())
-    for (a <- aggregators) {
-      a.aggregate().foreach(r => {
-        println(s"${r.fullName}")
-      })
-    }
+  def aggregate(aggregators: List[RepositoryAggregator]): List[AggregatedRepository] = {
+    aggregators
+      .map(a => a.aggregate())
+      .flatten(r => r)
+      .filter(r => !r.isPrivate)
   }
-  
+
 }
 
 trait RepositoryAggregator {
@@ -50,8 +45,29 @@ class GithubAggregator extends RepositoryAggregator {
     aggregated.toList
   }
   
-  def request(page: Int = 1): ListBuffer[AggregatedGithubRepository] = {
-    val repositories = ListBuffer[AggregatedGithubRepository]()
+  def request(page: Int = 1): List[AggregatedGithubRepository] = {
+    val client = new HttpClient()
+    // TODO: Error handling
+    val response = client.searchGithubRepository(page)
+    response.items
+      .filter(r => isUpdated(r))
+      .map(r => convert(r))
+  }
+  
+  private def convert(r: GithubRepository): AggregatedGithubRepository = {
+    AggregatedGithubRepository(id = r.id, fullName = r.full_name, description = r.description, isPrivate = r.`private`, pushedAt = r.pushed_at)
+  }
+  
+
+  private def isUpdated(repository: GithubRepository): Boolean = {
+    true
+  }
+
+}
+
+class HttpClient {
+  
+  def searchGithubRepository(page: Int): GithubResponse = {
     val client = new OkHttpClient()
     val req = new Builder()
       .url(s"https://api.github.com/search/repositories?q=mikutter&sort=updated&sort=desc&per_page=50&page=$page")
@@ -59,19 +75,7 @@ class GithubAggregator extends RepositoryAggregator {
     // TODO: Error handling
     val response = client.newCall(req).execute().body().string()
     implicit val formats = Serialization.formats(NoTypeHints)
-    val res = read[GithubResponse](response)
-    for (r <- res.items) {
-      if (!isUpdated(r)) {
-        return repositories
-      }
-      val item = AggregatedGithubRepository(id = r.id, fullName = r.full_name, isPrivate = r.`private`)
-      repositories.insert(repositories.size, item)
-    }
-    repositories
-  }
-
-  def isUpdated(repository: GithubRepository): Boolean = {
-    true
+    read[GithubResponse](response)
   }
   
 }
